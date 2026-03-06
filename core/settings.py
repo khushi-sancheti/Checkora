@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-xxp%6a$wd+upx#21yr%xz=o_o^@spzf%ozsp1i-lr!^bj%f6)4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['.vercel.app', '*']
 
 
 # Application definition
@@ -116,3 +116,5 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
