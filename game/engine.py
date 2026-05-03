@@ -85,6 +85,8 @@ class ChessGame:
             'b_k': True, 'b_q': True
         }
         self.en_passant_target = None  # (row, col) of the square a pawn can capture en passant
+        self.halfmove_clock = 0
+        self.repetition_counts = {self.generate_position_key(): 1}
 
     def serialize_board(self):
         """Flatten the 2-D board into a 64-char string for the C++ engine."""
@@ -105,6 +107,8 @@ class ChessGame:
             'castling_rights': self.castling_rights,
             'en_passant_target': self.en_passant_target,
             'player_color': self.player_color,
+            'halfmove_clock': self.halfmove_clock,
+            'repetition_counts': self.repetition_counts,
         }
 
     @classmethod
@@ -123,6 +127,13 @@ class ChessGame:
         game.player_color = data.get('player_color', 'white')
         game.castling_rights = data.get('castling_rights', {'w_k': True, 'w_q': True, 'b_k': True, 'b_q': True})
         game.en_passant_target = data.get('en_passant_target', None)
+        game.halfmove_clock = data.get('halfmove_clock', 0)
+
+        repetition_counts = data.get('repetition_counts')
+        if isinstance(repetition_counts, dict) and repetition_counts:
+            game.repetition_counts = repetition_counts
+        else:
+            game.repetition_counts = {game.generate_position_key(): 1}
 
         game.valid_moves_cache = {}
         return game
@@ -202,6 +213,22 @@ class ChessGame:
             return "-1 -1"
         return f"{self.en_passant_target[0]} {self.en_passant_target[1]}"
 
+    def _en_passant_key(self):
+        """Return a compact en-passant key for repetition tracking."""
+        if not self.en_passant_target:
+            return '-'
+        return f"{self.en_passant_target[0]},{self.en_passant_target[1]}"
+
+    def generate_position_key(self):
+        """Build the full repetition key for the current board state."""
+        return f"{self.generate_fen_key()} {self._en_passant_key()}"
+
+    def _update_repetition(self):
+        """Increment and return the repetition count for the current position."""
+        key = self.generate_position_key()
+        self.repetition_counts[key] = self.repetition_counts.get(key, 0) + 1
+        return self.repetition_counts[key]
+
     # ------------------------------------------------------------------
     #  Public API
     # ------------------------------------------------------------------
@@ -232,6 +259,7 @@ class ChessGame:
             return False, "Black ran out of time", None, 'timeout'
 
         captured = self.board[tr][tc]
+        is_pawn_move = piece.lower() == 'p'
         board_before = self.serialize_board()
         rights_before = self.serialize_castling_rights()
         ep_before = self._serialize_ep()
@@ -297,6 +325,11 @@ class ChessGame:
         if captured:
             self.captured[self.current_turn].append(captured)
 
+        if is_pawn_move or captured:
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
+
         notation = self._notation(fr, fc, tr, tc, piece, captured, board_before, rights_before, ep_before)
         if promoted and '=' not in notation:
             notation += '=' + (self.board[tr][tc] or 'Q').upper()
@@ -318,9 +351,14 @@ class ChessGame:
 
         self.last_ts = time.time()
 
+        repetition_count = self._update_repetition()
+
         # Check for checkmate / stalemate / check
         game_status = self.check_game_status()
         
+        if self.halfmove_clock >= 100 or repetition_count >= 3:
+            return True, notation, captured, 'draw'
+
         return True, notation, captured, game_status
 
     def get_valid_moves(self, row, col):

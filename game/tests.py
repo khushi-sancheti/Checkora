@@ -297,6 +297,48 @@ class PauseTest(TestCase):
         self.assertFalse(r2.json()['paused'])
 
 
+class DrawRuleTest(SimpleTestCase):
+    """Test rule-based draw detection in the engine."""
+
+    def setUp(self):
+        self.validate_patcher = mock.patch.object(ChessGame, 'validate_move', return_value=(True, 'ok'))
+        self.validate_patcher.start()
+
+    def tearDown(self):
+        self.validate_patcher.stop()
+
+    def test_fifty_move_rule_triggers_draw(self):
+        game = ChessGame()
+        game.halfmove_clock = 99
+
+        success, _, _, status = game.make_move(7, 6, 5, 5)
+
+        self.assertTrue(success)
+        self.assertEqual(status, 'draw')
+        self.assertEqual(game.halfmove_clock, 100)
+
+    def test_threefold_repetition_triggers_draw(self):
+        game = ChessGame()
+
+        sequence = [
+            (7, 6, 5, 5),
+            (0, 6, 2, 5),
+            (5, 5, 7, 6),
+            (2, 5, 0, 6),
+            (7, 6, 5, 5),
+            (0, 6, 2, 5),
+            (5, 5, 7, 6),
+            (2, 5, 0, 6),
+        ]
+
+        status = 'active'
+        for fr, fc, tr, tc in sequence:
+            success, _, _, status = game.make_move(fr, fc, tr, tc)
+            self.assertTrue(success)
+
+        self.assertEqual(status, 'draw')
+
+
 class AIMoveTest(TestCase):
     """Test the /api/ai-move/ endpoint."""
 
