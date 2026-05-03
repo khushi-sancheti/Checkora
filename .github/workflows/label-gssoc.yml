@@ -20,7 +20,7 @@ jobs:
           description: "GirlScript Summer of Code"
 
       - name: Add GSSoC label to the new issue
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@v4
         with:
           labels: GSSoC
           github_token: ${{ secrets.GITHUB_TOKEN }}
