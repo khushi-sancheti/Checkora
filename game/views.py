@@ -2,9 +2,12 @@
 
 import json
 import time
+import hashlib
+import random
 
+from django.conf import settings
 from django.http import JsonResponse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
@@ -327,7 +330,9 @@ def register_view(request):
             # Generate 6-digit OTP
             otp = str(random.randint(100000, 999999))
             request.session['registration_user_id'] = user.id
-            request.session['registration_otp'] = otp
+            # Hash OTP with SECRET_KEY as salt to prevent reading from signed cookies
+            otp_hash = hashlib.sha256(f"{otp}:{settings.SECRET_KEY}".encode()).hexdigest()
+            request.session['registration_otp_hash'] = otp_hash
 
             # Send Email
             try:
@@ -390,15 +395,18 @@ def verify_otp(request):
         return redirect('index')
         
     user_id = request.session.get('registration_user_id')
-    stored_otp = request.session.get('registration_otp')
+    stored_otp_hash = request.session.get('registration_otp_hash')
     
-    if not user_id or not stored_otp:
+    if not user_id or not stored_otp_hash:
         messages.error(request, 'Session expired. Please register again.')
         return redirect('register')
 
     if request.method == 'POST':
         entered_otp = request.POST.get('otp', '').strip()
-        if entered_otp == stored_otp:
+        # Verify hash
+        entered_otp_hash = hashlib.sha256(f"{entered_otp}:{settings.SECRET_KEY}".encode()).hexdigest()
+        
+        if entered_otp_hash == stored_otp_hash:
             try:
                 user = User.objects.get(id=user_id)
                 user.is_active = True
@@ -406,7 +414,7 @@ def verify_otp(request):
 
                 # Clear session data
                 del request.session['registration_user_id']
-                del request.session['registration_otp']
+                del request.session['registration_otp_hash']
 
                 login(request, user)
                 return redirect('index')
