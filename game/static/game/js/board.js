@@ -103,10 +103,31 @@
         blackTime = data.black_time;
         paused = data.paused;
 
+        // --- FIXED: SYNC NAMES FROM API PAYLOAD ---
+        const wSaved = data.white_name || 'White';
+        const bSaved = data.black_name || 'Black';
+
+        // 1. Update the Labels next to the clocks
+        document.getElementById('whiteNameLabel').textContent = wSaved.toUpperCase();
+        document.getElementById('blackNameLabel').textContent = bSaved.toUpperCase();
+
+        // 2. Update the Input fields in the menu
+        document.getElementById('whiteNameInput').value = wSaved;
+        document.getElementById('blackNameInput').value = bSaved;
+
+        // 3. Update the Captured piece section labels
+        document.getElementById('whiteCapturedName').textContent = wSaved;
+        document.getElementById('blackCapturedName').textContent = bSaved;
+
+        // 4. Update the Turn Badge text
+        const currentName = (turn === 'white' ? wSaved : bSaved);
+        if (document.getElementById('turnBadgeText')) {
+            document.getElementById('turnBadgeText').textContent = currentName;
+        }
+
         gameMode = data.mode || 'pvp';
         if (modeBadge) modeBadge.textContent = gameMode === 'ai' ? 'VS AI' : 'PVP';
 
-        // Show Resume button if move history exists, hide otherwise
         if (data.move_history && data.move_history.length > 0) {
             if (welcomeResumeBtn) welcomeResumeBtn.style.display = 'block';
         } else {
@@ -410,14 +431,29 @@
     UI UPDATES
     ========================================================== */
     function updateTurn() {
-        turnEl.textContent = turn === 'white' ? "White's Turn" : "Black's Turn";
+        // 1. Get the current names from the inputs
+        const wName = document.getElementById('whiteNameInput').value.trim() || 'White';
+        const bName = document.getElementById('blackNameInput').value.trim() || 'Black';
+        const currentName = (turn === 'white' ? wName : bName);
+
+        // 2. Update the badge text using the name (this targets the <span> you added)
+        if (document.getElementById('turnBadgeText')) {
+            document.getElementById('turnBadgeText').textContent = currentName;
+        } else {
+            // Fallback in case the span isn't found
+            turnEl.textContent = currentName + "'s Turn";
+        }
+
+        // 3. Keep the existing class and clock logic
         turnEl.className = 'turn-badge ' + turn;
         document.getElementById('whiteClock').classList.toggle('active', turn === 'white');
         document.getElementById('blackClock').classList.toggle('active', turn === 'black');
+
         markPlayable();
-        // Update browser tab title to reflect whose turn it is
+
+        // 4. Update browser tab title to reflect the actual player name
         if (!gameOver) {
-            document.title = (turn === 'white' ? 'White to Move - Checkora' : 'Black to Move - Checkora');
+            document.title = `${currentName} to Move - Checkora`;
         }
     }
 
@@ -455,10 +491,14 @@
         paused = true;
         clearInterval(timerInterval);
 
+        const whiteName = document.getElementById('whiteNameLabel').textContent;
+        const blackName = document.getElementById('blackNameLabel').textContent;
+
         let title, message;
         if (status === 'checkmate') {
-            // currentTurn is the side that has NO moves (is checkmated)
-            const winner = currentTurn === 'white' ? 'Black' : 'White';
+            // currentTurn is the side that is checkmated.
+            // If white is checkmated, black wins.
+            const winner = (currentTurn === 'white') ? blackName : whiteName;
             title = 'Checkmate!';
             message = `${winner} wins!`;
         } else if (status === 'stalemate') {
@@ -467,13 +507,18 @@
         } else if (status === 'draw') {
             title = 'Draw!';
             message = 'Draw by Agreement.';
+        } else if (status === 'resign') {
+            // If currentTurn resigns, the other person wins
+            const winner = (currentTurn === 'white') ? blackName : whiteName;
+            title = 'Resignation';
+            message = `${winner} wins!`;
         }
 
         gameOverTitle.textContent = title;
         gameOverMessage.textContent = message;
         gameOverOverlay.classList.add('active');
         showStatus(title + ' ' + message, false);
-        // Update browser tab title to indicate game over
+
         document.title = 'Game Over - Checkora';
     }
 
@@ -592,8 +637,11 @@
     async function offerDraw() {
         if (paused || gameOver || gameMode !== 'pvp') return;
 
-        const offeringPlayer = turn === 'white' ? 'White' : 'Black';
-        const receivingPlayer = turn === 'white' ? 'Black' : 'White';
+        const wName = document.getElementById('whiteNameInput').value.trim() || 'White';
+        const bName = document.getElementById('blackNameInput').value.trim() || 'Black';
+
+        const offeringPlayer = turn === 'white' ? wName : bName;
+        const receivingPlayer = turn === 'white' ? bName : wName;
 
         showConfirm(
             "Offer Draw?",
@@ -624,16 +672,37 @@
     if (gameOverAIBtn) gameOverAIBtn.onclick = () => { gameOverOverlay.classList.remove('active'); startNewGame('ai'); };
 
     async function startNewGame(mode) {
-        const d = await post('/api/new-game/', { mode: mode });
+        // 1. Grab names from the inputs we added in Step 1
+        const wName = document.getElementById('whiteNameInput').value.trim() || 'White';
+        const bName = document.getElementById('blackNameInput').value.trim() || 'Black';
+
+        // 2. Send the names to the backend
+        const d = await post('/api/new-game/', {
+            mode: mode,
+            white_name: wName,
+            black_name: bName
+        });
+
+        // 3. Update the Game State
         board = d.board;
         turn = d.current_turn;
         paused = false;
         gameOver = false;
         gameMode = d.mode;
 
+
+        // 4. Update the UI labels with the new names
+        document.getElementById('whiteNameLabel').textContent = wName.toUpperCase();
+        document.getElementById('blackNameLabel').textContent = bName.toUpperCase();
+
+        document.getElementById('whiteCapturedName').textContent = wName;
+        document.getElementById('blackCapturedName').textContent = bName;
+        document.getElementById('turnBadgeText').textContent = (turn === 'white' ? wName : bName);
+
         //  FOR NEW GAME AFTER RESETS    
         if (document.getElementById('resignBtn')) document.getElementById('resignBtn').style.display = 'inline-block';
         if (document.getElementById('pauseBtn')) document.getElementById('pauseBtn').style.display = 'inline-block';
+
 
         if (modeBadge) modeBadge.textContent = gameMode === 'ai' ? 'VS AI' : 'PVP';
         movesEl.innerHTML = '<span class="placeholder">No moves yet</span>';
@@ -660,16 +729,22 @@
                 gameOver = true;
                 paused = true;
 
+                // --- ADD THESE LINES TO GET DYNAMIC NAMES ---
+                const wName = document.getElementById('whiteNameLabel').textContent;
+                const bName = document.getElementById('blackNameLabel').textContent;
+                const loserName = (turn === 'white' ? wName : bName);
+                const winnerName = (turn === 'white' ? bName : wName);
+
                 // Update the status bar text
                 const statusEl = document.getElementById('statusBar');
                 if (statusEl) {
-                    statusEl.textContent = response.game_status;
+                    statusEl.textContent = `${loserName} resigned. ${winnerName} wins!`;
                     statusEl.style.color = "#f0c040";
                 }
 
                 // Use the existing Game Over modal to show the winner
                 document.getElementById('gameOverTitle').textContent = "Game Over";
-                document.getElementById('gameOverMessage').textContent = response.message + " " + response.game_status;
+                document.getElementById('gameOverMessage').textContent = `${loserName} resigned. ${winnerName} wins!`;
                 document.getElementById('gameOverOverlay').style.display = 'flex';
 
                 // Hide the buttons
