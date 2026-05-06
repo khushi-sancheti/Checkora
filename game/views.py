@@ -4,7 +4,7 @@ import json
 import time
 import hashlib
 import random
-
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -470,6 +470,9 @@ def login_view(request):
 
     return render(request, 'game/login.html', {'form': form})
 
+@xframe_options_sameorigin
+def rules(request):
+    return render(request, 'game/rules.html')
 
 def logout_view(request):
     logout(request)
