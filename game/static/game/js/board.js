@@ -1309,7 +1309,8 @@
                 if (confettiContainer) {
                     confettiContainer.remove();
                 }
-                
+                copyPgnBtn.textContent = 'Copy PGN';
+                copyFenBtn.textContent = 'Copy FEN';
                 requestNewGame('pvp');
             };
             
@@ -1321,7 +1322,8 @@
                 if (confettiContainer) {
                     confettiContainer.remove();
                 }
-                
+                copyPgnBtn.textContent = 'Copy PGN';
+                copyFenBtn.textContent = 'Copy FEN';
                 requestNewGame('ai');
             };
 
